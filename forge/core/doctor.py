@@ -34,6 +34,22 @@ class DoctorReport:
         """True si todos los checks puntuables pasan. Lo usa `--strict`."""
         return self.score == self.total
 
+    def to_dict(self) -> dict:
+        """Los datos derivados van explícitos, no calculados por el consumidor.
+
+        `score`, `total` y `healthy` son propiedades, así que `asdict()` las
+        omitiría — y son justo lo que un consumidor necesita. Dejarlas fuera
+        obligaría a cada consumidor a reimplementar la regla de puntaje, que
+        es exactamente la duplicación que `core/checks.py` vino a eliminar.
+        """
+        return {
+            "path": str(self.path),
+            "score": self.score,
+            "total": self.total,
+            "healthy": self.healthy,
+            "checks": [c.to_dict() for c in self.checks],
+        }
+
 
 class Doctor:
     def __init__(self, path="."):

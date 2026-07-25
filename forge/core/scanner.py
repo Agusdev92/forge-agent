@@ -54,6 +54,15 @@ class ScanReport:
     files_with_todos: list = field(default_factory=list)
     empty_paths: list = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        return {
+            "python_files": self.python_files,
+            "todos": self.todos,
+            "empty_files": self.empty_files,
+            "files_with_todos": list(self.files_with_todos),
+            "empty_paths": list(self.empty_paths),
+        }
+
 
 class Scanner:
     def __init__(self, path="."):

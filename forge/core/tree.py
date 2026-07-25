@@ -16,6 +16,13 @@ class TreeEntry:
     is_directory: bool
     depth: int
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "is_directory": self.is_directory,
+            "depth": self.depth,
+        }
+
 
 class Tree:
     def __init__(self, path=".", max_depth: int = DEFAULT_MAX_DEPTH):

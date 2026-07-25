@@ -41,6 +41,15 @@ class CheckResult:
     def passed(self) -> bool:
         return self.status is Status.OK
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "status": self.status.value,
+            "detail": self.detail,
+            "scored": self.scored,
+            "passed": self.passed,
+        }
+
 
 def _directory_check(root, name: str, label: str, scored: bool = True) -> CheckResult:
     if is_dir(join(root, name)):
