@@ -1,23 +1,58 @@
-from os import listdir
-from os.path import isdir, join
+"""Árbol de directorios del proyecto."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from forge.core.filesystem import is_ignored
+
+DEFAULT_MAX_DEPTH = 3
+
+
+@dataclass(frozen=True)
+class TreeEntry:
+    name: str
+    is_directory: bool
+    depth: int
 
 
 class Tree:
-    def __init__(self, path="."):
-        self.path = path
+    def __init__(self, path=".", max_depth: int = DEFAULT_MAX_DEPTH):
+        self.path = Path(path)
+        self.max_depth = max_depth
 
-    def show(self):
-        print("📦 Proyecto\n")
+    def build(self) -> list:
+        """Construye el árbol hasta `max_depth` niveles.
 
-        items = sorted(listdir(self.path))
+        La versión anterior listaba un solo nivel pese a llamarse `tree`. El
+        límite de profundidad existe para que la salida siga siendo legible en
+        proyectos grandes.
+        """
+        entries: list = []
+        self._walk(self.path, depth=0, entries=entries)
+        return entries
 
-        for item in items:
-            if item.startswith("."):
+    def _walk(self, directory: Path, depth: int, entries: list) -> None:
+        if depth >= self.max_depth:
+            return
+
+        try:
+            children = sorted(
+                directory.iterdir(), key=lambda p: (p.is_file(), p.name)
+            )
+        except OSError:
+            return
+
+        for child in children:
+            if child.name.startswith(".") or is_ignored(child.name):
                 continue
 
-            full_path = join(self.path, item)
+            entries.append(
+                TreeEntry(
+                    name=child.name, is_directory=child.is_dir(), depth=depth
+                )
+            )
 
-            if isdir(full_path):
-                print(f"📁 {item}")
-            else:
-                print(f"📄 {item}")
+            if child.is_dir():
+                self._walk(child, depth + 1, entries)

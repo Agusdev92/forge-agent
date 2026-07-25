@@ -1,22 +1,40 @@
-from os import walk
+"""Métricas de tamaño del proyecto."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from forge.core.filesystem import walk
 from forge.core.project import Project
+
+
+@dataclass(frozen=True)
+class StatsReport:
+    language: str
+    directories: int
+    files: int
 
 
 class Stats:
     def __init__(self, path="."):
         self.path = path
 
-    def show(self):
-        project = Project(self.path)
+    def show(self) -> StatsReport:
+        """Cuenta carpetas y archivos del proyecto.
 
-        folders = 0
+        Usa `filesystem.walk`, que poda los directorios ignorados. La versión
+        anterior llamaba a `os.walk` directamente y contaba `.git` y `.venv`:
+        sobre este mismo repo reportaba 101 archivos donde hay 31.
+        """
+        directories = 0
         files = 0
 
-        for _, dirs, filenames in walk(self.path):
-            folders += len(dirs)
+        for _, dirnames, filenames in walk(self.path):
+            directories += len(dirnames)
             files += len(filenames)
 
-        print("📊 Forge Stats\n")
-        print(f"🐍 Lenguaje: {project.detect_language()}")
-        print(f"📂 Carpetas: {folders}")
-        print(f"📄 Archivos: {files}")
+        return StatsReport(
+            language=Project(self.path).detect_language(),
+            directories=directories,
+            files=files,
+        )
