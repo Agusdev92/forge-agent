@@ -14,20 +14,25 @@ class DoctorReport:
 
     @property
     def score(self) -> int:
-        """Solo los checks en OK suman.
+        """Solo los checks puntuables en OK suman.
 
         Las advertencias no dan puntaje parcial a propósito: un `README.md`
         vacío no documenta a medias, no documenta.
         """
-        return sum(1 for c in self.checks if c.passed)
+        return sum(1 for c in self.checks if c.scored and c.passed)
 
     @property
     def total(self) -> int:
-        return len(self.checks)
+        return sum(1 for c in self.checks if c.scored)
 
     @property
     def warnings(self) -> list:
         return [c for c in self.checks if c.status is Status.WARNING]
+
+    @property
+    def healthy(self) -> bool:
+        """True si todos los checks puntuables pasan. Lo usa `--strict`."""
+        return self.score == self.total
 
 
 class Doctor:

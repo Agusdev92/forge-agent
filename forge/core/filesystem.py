@@ -74,12 +74,24 @@ def has_content(path) -> bool:
         return False
 
 
+def _propagate(error: OSError) -> None:
+    """Convierte los errores de `os.walk` en excepciones.
+
+    Por defecto `os.walk` los descarta en silencio: un directorio sin permisos
+    de lectura no produce error, produce cero resultados. Eso hacía que `stats`
+    informara "0 archivos" para un proyecto que no pudo leer, que es peor que
+    fallar — un análisis silenciosamente incompleto se parece a uno correcto.
+    La CLI traduce estas excepciones a mensajes legibles.
+    """
+    raise error
+
+
 def walk(root) -> Iterator[tuple]:
     """Como `os.walk`, pero podando los directorios ignorados.
 
     Devuelve `(Path, dirnames, filenames)` con ambas listas ordenadas.
     """
-    for dirpath, dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_propagate):
         dirnames[:] = sorted(d for d in dirnames if not is_ignored(d))
         yield Path(dirpath), dirnames, sorted(filenames)
 

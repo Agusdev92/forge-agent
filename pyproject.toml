@@ -22,3 +22,7 @@ forge = "forge.cli:app"
 
 [tool.setuptools.packages.find]
 include = ["forge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

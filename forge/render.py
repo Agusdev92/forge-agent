@@ -19,9 +19,14 @@ SYMBOLS = {
 
 def _check_line(check) -> str:
     symbol = SYMBOLS[check.status]
+    line = f"{symbol} {check.name}"
+
     if check.detail and check.status is not Status.OK:
-        return f"{symbol} {check.name} — {check.detail}"
-    return f"{symbol} {check.name}"
+        line += f" — {check.detail}"
+    if not check.scored:
+        line += " (informativo)"
+
+    return line
 
 
 def render_project(report) -> str:

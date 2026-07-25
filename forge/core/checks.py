@@ -34,16 +34,30 @@ class CheckResult:
     name: str
     status: Status
     detail: str = ""
+    #: Si el check suma al health score. Ver `_venv_check`.
+    scored: bool = True
 
     @property
     def passed(self) -> bool:
         return self.status is Status.OK
 
 
-def _directory_check(root, name: str, label: str) -> CheckResult:
+def _directory_check(root, name: str, label: str, scored: bool = True) -> CheckResult:
     if is_dir(join(root, name)):
-        return CheckResult(label, Status.OK)
-    return CheckResult(label, Status.MISSING, f"falta {name}/")
+        return CheckResult(label, Status.OK, scored=scored)
+    return CheckResult(label, Status.MISSING, f"falta {name}/", scored=scored)
+
+
+def _venv_check(root) -> CheckResult:
+    """El entorno virtual se informa pero no puntúa.
+
+    `.venv/` está en `.gitignore` de cualquier proyecto sano, así que nunca
+    existe en un clon recién hecho ni en un runner de CI. Puntuarlo hacía que
+    el mismo proyecto sacara distinto score según la máquina, que es lo
+    contrario de lo que un health score debería medir: es una propiedad del
+    entorno de quien ejecuta, no del proyecto analizado.
+    """
+    return _directory_check(root, ".venv", "Entorno virtual", scored=False)
 
 
 def _file_check(root, name: str) -> CheckResult:
@@ -81,5 +95,5 @@ def run_checks(root=".") -> list:
         _directory_check(root, "tests", "tests"),
         _file_check(root, "README.md"),
         _file_check(root, ".gitignore"),
-        _directory_check(root, ".venv", "Entorno virtual"),
+        _venv_check(root),
     ]

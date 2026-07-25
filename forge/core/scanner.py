@@ -2,19 +2,48 @@
 
 from __future__ import annotations
 
+import io
 import re
+import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from forge.core.filesystem import iter_files
 
-#: Solo cuentan los marcadores en comentarios. Buscar la subcadena "TODO" suelta
-#: daba falsos positivos con cualquier código que mencionara la palabra —
-#: incluido este propio módulo.
-TODO_PATTERN = re.compile(r"#\s*(TODO|FIXME)\b")
+#: Marcador dentro de un comentario ya aislado.
+TODO_PATTERN = re.compile(r"\b(TODO|FIXME)\b")
+
+#: Fallback para archivos que no tokenizan (sintaxis inválida, Python 2...).
+#: Menos preciso, pero es preferible a no reportar nada sobre ese archivo.
+COMMENT_PATTERN = re.compile(r"#\s*(TODO|FIXME)\b")
 
 #: Un `__init__.py` vacío es un marcador de paquete válido, no deuda técnica.
 ALLOWED_EMPTY = frozenset({"__init__.py"})
+
+
+def count_markers(text: str) -> int:
+    """Cuenta TODO/FIXME que estén realmente en comentarios.
+
+    Tokeniza en vez de buscar texto. Las dos versiones anteriores basadas en
+    búsqueda de subcadena dieron falsos positivos: primero contaban la palabra
+    "TODO" en cualquier posición (incluida la definición de los marcadores de
+    este módulo), después contaban `# TODO` dentro de literales de string —
+    los propios tests de Forge inflaban la métrica con sus datos de prueba.
+
+    Dos rondas de falsos positivos sobre la misma métrica indican que buscar
+    texto es la herramienta equivocada: solo el tokenizador sabe qué es un
+    comentario y qué es un string que se le parece.
+    """
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, SyntaxError, IndentationError, ValueError):
+        return len(COMMENT_PATTERN.findall(text))
+
+    return sum(
+        len(TODO_PATTERN.findall(token.string))
+        for token in tokens
+        if token.type == tokenize.COMMENT
+    )
 
 
 @dataclass(frozen=True)
@@ -52,7 +81,7 @@ class Scanner:
             if not text.strip() and file.name not in ALLOWED_EMPTY:
                 empty_paths.append(str(file))
 
-            found = len(TODO_PATTERN.findall(text))
+            found = count_markers(text)
             if found:
                 todos += found
                 files_with_todos.append(str(file))

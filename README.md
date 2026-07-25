@@ -42,7 +42,15 @@ Los módulos de `core/` devuelven objetos (`DoctorReport`, `ScanReport`, ...) y 
 escriben en pantalla. El formateo está aislado en `render.py` para que la
 terminal no sea el único consumidor posible de estos análisis.
 
+## Desarrollo
+
+```bash
+pip install -e ".[dev]"
+pytest
+forge doctor --strict --path .   # el mismo gate que corre en CI
+```
+
 ## Estado
 
-En desarrollo. Las decisiones técnicas y el roadmap están documentados en
+En desarrollo. Cada cambio técnico está documentado con su justificación en
 [`docs/reports/`](docs/reports/).
