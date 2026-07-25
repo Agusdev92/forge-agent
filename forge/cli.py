@@ -1,0 +1,38 @@
+import os
+import typer
+
+app = typer.Typer(help="Forge Agent")
+
+
+@app.command()
+def version():
+    """Show Forge version."""
+    typer.echo("Forge Agent v0.1.0")
+
+
+@app.command()
+def analyze(
+    path: str = typer.Argument(".", help="Ruta del proyecto")
+):
+    """Analyze a project."""
+
+    typer.echo(f"📁 Proyecto: {os.path.abspath(path)}")
+
+    if os.path.isdir(os.path.join(path, ".git")):
+        typer.echo("✅ Git detectado")
+    else:
+        typer.echo("❌ Git no encontrado")
+
+    if os.path.exists(os.path.join(path, "requirements.txt")):
+        typer.echo("✅ requirements.txt encontrado")
+    else:
+        typer.echo("❌ requirements.txt no encontrado")
+
+    if os.path.isdir(os.path.join(path, ".venv")):
+        typer.echo("✅ Entorno virtual encontrado")
+    else:
+        typer.echo("❌ Entorno virtual no encontrado")
+
+
+if __name__ == "__main__":
+    app()
