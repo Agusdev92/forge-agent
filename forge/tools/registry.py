@@ -32,6 +32,16 @@ from forge.tools.sandbox import (
 )
 
 
+#: Superficie reducida para modelos chicos.
+#:
+#: Un modelo de 1B–3B elige mal entre siete herramientas: se confunde entre las
+#: que se parecen (`analyze`, `doctor`, `stats`) y gasta pasos. Estas tres
+#: cubren el ciclo completo —descubrir, leer, escribir— sin opciones ambiguas:
+#: `forge_analyze` ya devuelve estructura y salud en una sola llamada, con lo
+#: cual no hace falta ninguna de las otras de análisis.
+MINIMAL_TOOLS = ("forge_analyze", "read_file", "write_file")
+
+
 def _ok(payload) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
@@ -57,12 +67,17 @@ def _error(message: str) -> str:
     return json.dumps({"error": message}, ensure_ascii=False)
 
 
-def build_tools(root=".", approver=deny_all) -> list:
+class UnknownTool(Exception):
+    """Se pidió una herramienta que no existe."""
+
+
+def build_tools(root=".", approver=deny_all, only=None) -> list:
     """Construye las herramientas ancladas a `root`.
 
     Args:
         root: Raíz del proyecto. La fija quien ejecuta Forge.
         approver: Se consulta antes de cada escritura. El default deniega.
+        only: Nombres a exponer. `None` expone todas. Ver `MINIMAL_TOOLS`.
     """
     base = Path(root).resolve()
 
@@ -226,7 +241,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         return _ok({"path": display, "action": request.action,
                     "bytes": len(content.encode("utf-8"))})
 
-    return [
+    tools = [
         forge_analyze,
         forge_doctor,
         forge_stats,
@@ -235,3 +250,21 @@ def build_tools(root=".", approver=deny_all) -> list:
         read_file,
         write_file,
     ]
+
+    if only is None:
+        return tools
+
+    wanted = list(only)
+    available = {t.name for t in tools}
+    unknown = [name for name in wanted if name not in available]
+
+    if unknown:
+        raise UnknownTool(
+            f"No existe: {', '.join(unknown)}. "
+            f"Disponibles: {', '.join(sorted(available))}"
+        )
+
+    # Se respeta el orden pedido: el orden en que el modelo ve las herramientas
+    # influye en cuál elige, así que quien recorta decide la prioridad.
+    by_name = {t.name: t for t in tools}
+    return [by_name[name] for name in wanted]

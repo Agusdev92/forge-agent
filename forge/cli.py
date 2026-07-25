@@ -30,7 +30,7 @@ from forge.providers import (
     ModelConfig,
     ProviderError,
 )
-from forge.tools import build_tools
+from forge.tools import MINIMAL_TOOLS, UnknownTool, build_tools
 
 __version__ = "0.1.0"
 
@@ -139,13 +139,33 @@ def scan(path: str = PathOption):
     typer.echo(render.render_scan(report))
 
 
+def _tool_selection(value: str):
+    """Traduce `--tools` a la lista de nombres, o `None` para todas."""
+    if value == "all":
+        return None
+    if value == "minimal":
+        return list(MINIMAL_TOOLS)
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
 @app.command()
 def ask(
     question: str = typer.Argument(..., help="Qué querés saber del proyecto"),
     path: str = PathOption,
-    model: str = typer.Option(DEFAULT_MODEL, "--model", "-m", help="Modelo local"),
+    model: str = typer.Option(
+        DEFAULT_MODEL, "--model", "-m", envvar="FORGE_MODEL", help="Modelo local"
+    ),
     base_url: str = typer.Option(
-        DEFAULT_BASE_URL, "--base-url", help="URL del runtime local"
+        DEFAULT_BASE_URL,
+        "--base-url",
+        envvar="FORGE_BASE_URL",
+        help="URL del runtime. Podés fijarla con la variable FORGE_BASE_URL.",
+    ),
+    tools: str = typer.Option(
+        "all",
+        "--tools",
+        envvar="FORGE_TOOLS",
+        help="'all', 'minimal' (para modelos chicos) o una lista separada por comas.",
     ),
     max_iterations: int = typer.Option(
         DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
@@ -160,12 +180,16 @@ def ask(
     approver = (
         approval_cli.approve_everything if yes else approval_cli.confirm_write
     )
+
+    try:
+        selected = build_tools(
+            target, approver=approver, only=_tool_selection(tools)
+        )
+    except UnknownTool as exc:
+        _fail(str(exc))
+
     client = LocalChatClient(ModelConfig(base_url=base_url, model=model))
-    agent = Agent(
-        client,
-        build_tools(target, approver=approver),
-        max_iterations=max_iterations,
-    )
+    agent = Agent(client, selected, max_iterations=max_iterations)
 
     try:
         result = agent.run(question)

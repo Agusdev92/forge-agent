@@ -39,8 +39,23 @@ forge ask "¿qué le falta a este proyecto?"
 forge ask "escribí un README" --path ../otro-proyecto
 ```
 
-Opciones: `--model`, `--base-url`, `--max-iterations`, y `--yes` para aprobar las
-escrituras sin preguntar.
+Opciones: `--model`, `--base-url`, `--tools`, `--max-iterations`, y `--yes` para
+aprobar las escrituras sin preguntar.
+
+### Configuración persistente
+
+Para no repetir las opciones en cada consulta, hay tres variables de entorno:
+
+```bash
+export FORGE_BASE_URL=http://192.168.1.47:11434/v1
+export FORGE_MODEL=qwen2.5-coder:7b
+export FORGE_TOOLS=all
+
+forge ask "¿qué le falta?"     # ya usa lo de arriba
+```
+
+Poniéndolas en `~/.bashrc` (o `~/.profile`) quedan fijas. Las opciones de línea
+de comandos siguen teniendo prioridad sobre las variables.
 
 ### Runtime
 
@@ -51,6 +66,44 @@ Ollama, llama.cpp server, LM Studio o vLLM. El default apunta a Ollama:
 forge ask "..." --base-url http://localhost:8080/v1   # llama.cpp
 forge ask "..." --base-url http://localhost:1234/v1   # LM Studio
 ```
+
+### Modelo en otra máquina de la red
+
+Forge y el modelo no tienen por qué estar en el mismo equipo. Sirve para correr
+Forge en una máquina modesta —un teléfono con Termux, por ejemplo— y dejar el
+modelo en una con GPU.
+
+En la máquina del modelo, Ollama tiene que escuchar en la red y no solo en
+`localhost`:
+
+```bash
+OLLAMA_HOST=0.0.0.0 ollama serve
+```
+
+En la máquina que corre Forge, apuntá a su IP (`ip addr` o `ipconfig` te lo dice):
+
+```bash
+export FORGE_BASE_URL=http://192.168.1.47:11434/v1
+forge ask "¿qué le falta?"
+```
+
+Sin firewall de por medio no hace falta nada más. **Los análisis se hacen del
+lado de Forge**: al modelo solo le llegan los resultados, no el árbol de
+archivos entero.
+
+### Modelos chicos: recortar las herramientas
+
+Un modelo de 1B–3B elige mal entre siete herramientas — se confunde entre las
+que se parecen y gasta pasos. `--tools minimal` deja tres que cubren el ciclo
+completo (`forge_analyze` para descubrir, `read_file`, `write_file`):
+
+```bash
+forge ask "..." --tools minimal
+forge ask "..." --tools forge_doctor,read_file    # o elegilas a mano
+```
+
+Vale la pena probar `all` primero y recortar solo si ves llamadas erróneas en la
+traza que imprime `forge ask` — para eso está.
 
 **El tamaño de contexto se configura del lado del runtime**: el endpoint
 compatible no lo acepta como parámetro. Si el modelo parece "olvidarse" de lo

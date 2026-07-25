@@ -241,3 +241,49 @@ def test_diff_for_a_new_file(make_project):
 
     assert "/dev/null" in seen[0].diff()
     assert "+contenido" in seen[0].diff()
+
+
+# --------------------------------------------------------------------------
+# Selección de herramientas
+# --------------------------------------------------------------------------
+
+
+def test_all_tools_by_default(make_project):
+    assert len(build_tools(make_project())) == 7
+
+
+def test_minimal_covers_the_full_cycle(make_project):
+    """Descubrir, leer y escribir: sin alguna de las tres, el agente se traba."""
+    from forge.tools import MINIMAL_TOOLS
+
+    names = [t.name for t in build_tools(make_project(), only=MINIMAL_TOOLS)]
+
+    assert names == ["forge_analyze", "read_file", "write_file"]
+
+
+def test_selection_respects_the_requested_order(make_project):
+    """El orden influye en cuál elige el modelo, así que lo decide quien recorta."""
+    tools = build_tools(make_project(), only=["write_file", "forge_doctor"])
+
+    assert [t.name for t in tools] == ["write_file", "forge_doctor"]
+
+
+def test_unknown_tool_name_is_rejected(make_project):
+    from forge.tools import UnknownTool
+
+    with pytest.raises(UnknownTool) as exc:
+        build_tools(make_project(), only=["forge_doctor", "no_existe"])
+
+    assert "no_existe" in str(exc.value)
+    assert "forge_doctor" in str(exc.value)
+
+
+def test_selection_keeps_the_security_controls(make_project):
+    """Recortar la superficie no puede aflojar el confinamiento."""
+    project = make_project()
+    tools = {t.name: t for t in build_tools(project, only=["write_file"])}
+
+    result = call(tools["write_file"], path="../fuera.txt", content="x")
+
+    assert "error" in result
+    assert not (project.parent / "fuera.txt").exists()
