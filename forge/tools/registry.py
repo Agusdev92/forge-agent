@@ -6,7 +6,7 @@ herramientas, el modelo podría elegirla y el confinamiento de `sandbox.py` no
 serviría de nada. El modelo decide *qué* mirar dentro del proyecto; nunca
 *cuál* es el proyecto ni si una escritura se ejecuta.
 
-Los esquemas JSON los genera `@beta_tool` a partir de la firma y el docstring
+Los esquemas JSON los genera `@tool` a partir de la firma y el docstring
 de cada función, así que la documentación de los parámetros no es decorativa:
 es literalmente lo que el modelo lee para decidir cómo llamarlas.
 """
@@ -16,13 +16,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from anthropic import beta_tool
 
 from forge.core.doctor import Doctor
 from forge.core.project import Project
 from forge.core.scanner import Scanner
 from forge.core.stats import Stats
 from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
+from forge.tools.schema import tool
 from forge.tools.approval import CREATE, OVERWRITE, WriteRequest, deny_all
 from forge.tools.sandbox import (
     MAX_READ_BYTES,
@@ -73,7 +73,7 @@ def build_tools(root=".", approver=deny_all) -> list:
     # Análisis (solo lectura)
     # ------------------------------------------------------------------
 
-    @beta_tool
+    @tool
     def forge_analyze(path: str = ".") -> str:
         """Analiza un proyecto: lenguaje detectado, checks de salud y contenido del primer nivel.
 
@@ -86,7 +86,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         except (PathOutsideProject, OSError) as exc:
             return _error(str(exc))
 
-    @beta_tool
+    @tool
     def forge_doctor(path: str = ".") -> str:
         """Diagnostica la salud del proyecto y devuelve un puntaje sobre los checks puntuables.
 
@@ -99,7 +99,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         except (PathOutsideProject, OSError) as exc:
             return _error(str(exc))
 
-    @beta_tool
+    @tool
     def forge_stats(path: str = ".") -> str:
         """Cuenta carpetas y archivos del proyecto, excluyendo .git, .venv y artefactos de build.
 
@@ -111,7 +111,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         except (PathOutsideProject, OSError) as exc:
             return _error(str(exc))
 
-    @beta_tool
+    @tool
     def forge_scan(path: str = ".") -> str:
         """Busca deuda visible: archivos Python, marcadores TODO/FIXME en comentarios y archivos vacíos.
 
@@ -128,7 +128,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         except (PathOutsideProject, OSError) as exc:
             return _error(str(exc))
 
-    @beta_tool
+    @tool
     def forge_tree(path: str = ".", depth: int = DEFAULT_MAX_DEPTH) -> str:
         """Devuelve el árbol de directorios del proyecto hasta cierta profundidad.
 
@@ -144,7 +144,7 @@ def build_tools(root=".", approver=deny_all) -> list:
         except (PathOutsideProject, OSError) as exc:
             return _error(str(exc))
 
-    @beta_tool
+    @tool
     def read_file(path: str) -> str:
         """Lee el contenido de un archivo de texto del proyecto.
 
@@ -174,7 +174,7 @@ def build_tools(root=".", approver=deny_all) -> list:
     # Escritura (requiere aprobación)
     # ------------------------------------------------------------------
 
-    @beta_tool
+    @tool
     def write_file(path: str, content: str) -> str:
         """Crea o reemplaza un archivo de texto del proyecto.
 

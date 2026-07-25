@@ -85,6 +85,32 @@ def render_scan(report) -> str:
     return "\n".join(lines)
 
 
+def render_agent(result) -> str:
+    """Muestra qué herramientas se usaron antes de la respuesta.
+
+    La traza no es decorativa: con un modelo local conviene poder ver si la
+    respuesta se apoyó en datos reales del proyecto o si el modelo la inventó
+    sin llamar a nada.
+    """
+    lines = []
+
+    for invocation in result.invocations:
+        symbol = "✗" if invocation.failed else "→"
+        arguments = ", ".join(f"{k}={v!r}" for k, v in invocation.arguments.items())
+        lines.append(f"  {symbol} {invocation.name}({arguments})")
+
+    if lines:
+        lines = ["🔧 Herramientas usadas", *lines, ""]
+
+    if result.stop_reason == "empty_response":
+        lines.append("❌ El modelo respondió vacío. Puede ser un modelo sin soporte "
+                     "de herramientas o un contexto demasiado corto.")
+    else:
+        lines.append(result.answer)
+
+    return "\n".join(lines)
+
+
 def render_tree(entries) -> str:
     lines = ["📦 Proyecto", ""]
 

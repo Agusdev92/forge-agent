@@ -16,12 +16,21 @@ from pathlib import Path
 
 import typer
 
-from forge import render
+from forge import approval_cli, render
+from forge.agent import DEFAULT_MAX_ITERATIONS, Agent
 from forge.core.doctor import Doctor
 from forge.core.project import Project
 from forge.core.scanner import Scanner
 from forge.core.stats import Stats
 from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
+from forge.providers import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    LocalChatClient,
+    ModelConfig,
+    ProviderError,
+)
+from forge.tools import build_tools
 
 __version__ = "0.1.0"
 
@@ -128,6 +137,49 @@ def scan(path: str = PathOption):
     target = _validate(path)
     report = _guard(target, lambda: Scanner(target).scan())
     typer.echo(render.render_scan(report))
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Qué querés saber del proyecto"),
+    path: str = PathOption,
+    model: str = typer.Option(DEFAULT_MODEL, "--model", "-m", help="Modelo local"),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL, "--base-url", help="URL del runtime local"
+    ),
+    max_iterations: int = typer.Option(
+        DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="Aprueba las escrituras sin preguntar. Usalo con cuidado."
+    ),
+):
+    """Le pregunta al modelo local sobre el proyecto."""
+    target = _validate(path)
+
+    approver = (
+        approval_cli.approve_everything if yes else approval_cli.confirm_write
+    )
+    client = LocalChatClient(ModelConfig(base_url=base_url, model=model))
+    agent = Agent(
+        client,
+        build_tools(target, approver=approver),
+        max_iterations=max_iterations,
+    )
+
+    try:
+        result = agent.run(question)
+    except ProviderError as exc:
+        _fail(str(exc))
+    finally:
+        client.close()
+
+    typer.echo(render.render_agent(result))
+
+    # Un tope alcanzado no es una respuesta: quien lo invoque desde un script
+    # tiene que poder distinguirlo sin parsear el texto.
+    if result.hit_limit:
+        raise typer.Exit(code=EXIT_UNHEALTHY)
 
 
 if __name__ == "__main__":
