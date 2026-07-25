@@ -1,45 +1,57 @@
-from forge.core.filesystem import exists, is_dir, join, absolute, FileSystem
+"""Análisis general de un proyecto."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from forge.core.checks import run_checks
+from forge.core.filesystem import FileSystem, absolute, exists, iter_files, join
+
+UNKNOWN_LANGUAGE = "Desconocido"
+
+
+@dataclass(frozen=True)
+class ProjectReport:
+    path: str
+    language: str
+    checks: list
+    directories: list
+    files: list
 
 
 class Project:
     def __init__(self, path="."):
         self.path = path
 
-    def detect_language(self):
-        if exists(join(self.path, "requirements.txt")):
-            return "Python"
+    def detect_language(self) -> str:
+        """Detecta el lenguaje por manifiesto y, si no hay, por extensiones.
 
-        if exists(join(self.path, "package.json")):
-            return "Node.js"
+        El fallback por extensión existe porque antes un proyecto Python sin
+        `requirements.txt` se reportaba como "Desconocido" aunque estuviera
+        lleno de archivos `.py`. También se agregó `pyproject.toml`, que es el
+        estándar actual de empaquetado y que la versión anterior ignoraba.
+        """
+        for manifest, language in (
+            ("pyproject.toml", "Python"),
+            ("requirements.txt", "Python"),
+            ("setup.py", "Python"),
+            ("package.json", "Node.js"),
+        ):
+            if exists(join(self.path, manifest)):
+                return language
 
-        return "Desconocido"
+        for suffix, language in ((".py", "Python"), (".js", "Node.js")):
+            if next(iter_files(self.path, suffix), None) is not None:
+                return language
 
-    def analyze(self):
-        print(f"📁 Proyecto: {absolute(self.path)}")
+        return UNKNOWN_LANGUAGE
 
-        if is_dir(join(self.path, ".git")):
-            print("✅ Git encontrado")
-        else:
-            print("❌ Git no encontrado")
-
-        if exists(join(self.path, "requirements.txt")):
-            print("✅ requirements.txt encontrado")
-        else:
-            print("❌ requirements.txt no encontrado")
-
-        if is_dir(join(self.path, ".venv")):
-            print("✅ Entorno virtual encontrado")
-        else:
-            print("❌ Entorno virtual no encontrado")
-
-        print(f"🐍 Lenguaje: {self.detect_language()}")
-
+    def analyze(self) -> ProjectReport:
         fs = FileSystem(self.path)
-
-        print("\n📂 Carpetas")
-        for folder in fs.list_directories():
-            print(f" - {folder}")
-
-        print("\n📄 Archivos")
-        for file in fs.list_files():
-            print(f" - {file}")
+        return ProjectReport(
+            path=absolute(self.path),
+            language=self.detect_language(),
+            checks=run_checks(self.path),
+            directories=fs.list_directories(),
+            files=fs.list_files(),
+        )
