@@ -137,9 +137,16 @@ que se parecen y gasta pasos. `--tools minimal` deja tres que cubren el ciclo
 completo (`forge_analyze` para descubrir, `read_file`, `write_file`):
 
 ```bash
-forge ask "..." --tools minimal
+forge ask "..." --tools read-only   # sin write_file
+forge ask "..." --tools minimal     # tres herramientas, con escritura
 forge ask "..." --tools forge_doctor,read_file    # o elegilas a mano
 ```
+
+**Para preguntas, usá `read-only`.** Un modelo chico no distingue "evaluá esto"
+de "producí esto": ante *"leé el README y decime si está bien"*, un 3B eligió
+`write_file` y propuso reescribirlo entero borrando secciones. La compuerta de
+aprobación lo frenó, pero la consulta se perdió igual. Si la herramienta de
+escritura no está sobre la mesa, la tentación desaparece.
 
 Vale la pena probar `all` primero y recortar solo si ves llamadas erróneas en la
 traza que imprime `forge ask` — para eso está.

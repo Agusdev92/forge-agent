@@ -32,7 +32,7 @@ from forge.providers import (
     ModelConfig,
     ProviderError,
 )
-from forge.tools import MINIMAL_TOOLS, UnknownTool, build_tools
+from forge.tools import MINIMAL_TOOLS, READ_ONLY_TOOLS, UnknownTool, build_tools
 
 __version__ = "0.1.0"
 
@@ -168,6 +168,8 @@ def _tool_selection(value: str):
         return None
     if value == "minimal":
         return list(MINIMAL_TOOLS)
+    if value == "read-only":
+        return list(READ_ONLY_TOOLS)
     return [name.strip() for name in value.split(",") if name.strip()]
 
 
@@ -188,7 +190,10 @@ def ask(
         "all",
         "--tools",
         envvar="FORGE_TOOLS",
-        help="'all', 'minimal' (para modelos chicos) o una lista separada por comas.",
+        help=(
+            "'all', 'read-only' (sin escritura), 'minimal' (modelos chicos) "
+            "o una lista separada por comas."
+        ),
     ),
     max_iterations: int = typer.Option(
         DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
