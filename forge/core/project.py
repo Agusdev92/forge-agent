@@ -18,6 +18,17 @@ class ProjectReport:
     directories: list
     files: list
 
+    def to_dict(self) -> dict:
+        """Misma separación que `DoctorReport`: informativos aparte."""
+        return {
+            "path": self.path,
+            "language": self.language,
+            "checks": [c.to_dict() for c in self.checks if c.scored],
+            "informational": [c.to_dict() for c in self.checks if not c.scored],
+            "directories": list(self.directories),
+            "files": list(self.files),
+        }
+
 
 class Project:
     def __init__(self, path="."):

@@ -107,3 +107,65 @@ def test_scan_reports_todo_count(make_project):
 
     assert result.exit_code == 0
     assert "TODO/FIXME encontrados: 1" in result.output
+
+
+# --------------------------------------------------------------------------
+# `forge ask`: configuración por entorno y recorte de herramientas
+# --------------------------------------------------------------------------
+
+DEAD_URL = "http://127.0.0.1:9/v1"
+
+
+def test_base_url_can_come_from_the_environment(healthy_project):
+    """Escribir la URL a mano en cada consulta es inviable en un teléfono."""
+    result = runner.invoke(
+        app,
+        ["ask", "hola", "--path", str(healthy_project)],
+        env={"FORGE_BASE_URL": DEAD_URL},
+    )
+
+    assert result.exit_code == EXIT_USAGE
+    assert "127.0.0.1:9" in output_of(result)
+
+
+def test_the_flag_wins_over_the_environment(healthy_project):
+    result = runner.invoke(
+        app,
+        ["ask", "hola", "--path", str(healthy_project), "--base-url", DEAD_URL],
+        env={"FORGE_BASE_URL": "http://127.0.0.1:7/v1"},
+    )
+
+    assert "127.0.0.1:9" in output_of(result)
+
+
+def test_unknown_tool_fails_before_contacting_the_model(healthy_project):
+    """El error tiene que ser sobre la herramienta, no sobre la conexión."""
+    result = runner.invoke(
+        app,
+        [
+            "ask",
+            "hola",
+            "--path",
+            str(healthy_project),
+            "--tools",
+            "forge_doctor,inventada",
+            "--base-url",
+            DEAD_URL,
+        ],
+    )
+
+    output = output_of(result)
+    assert result.exit_code == EXIT_USAGE
+    assert "inventada" in output
+    assert "escuchando" not in output
+
+
+def test_minimal_selection_is_accepted(healthy_project):
+    """Llega a intentar conectarse, o sea que la selección no falló."""
+    result = runner.invoke(
+        app,
+        ["ask", "hola", "--path", str(healthy_project), "--tools", "minimal",
+         "--base-url", DEAD_URL],
+    )
+
+    assert "escuchando" in output_of(result)

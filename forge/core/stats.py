@@ -14,6 +14,13 @@ class StatsReport:
     directories: int
     files: int
 
+    def to_dict(self) -> dict:
+        return {
+            "language": self.language,
+            "directories": self.directories,
+            "files": self.files,
+        }
+
 
 class Stats:
     def __init__(self, path="."):

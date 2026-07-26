@@ -16,12 +16,22 @@ from pathlib import Path
 
 import typer
 
-from forge import render
+from forge import approval_cli, render
+from forge.agent import DEFAULT_MAX_ITERATIONS, Agent
 from forge.core.doctor import Doctor
 from forge.core.project import Project
 from forge.core.scanner import Scanner
 from forge.core.stats import Stats
 from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
+from forge.providers import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    DEFAULT_TIMEOUT,
+    LocalChatClient,
+    ModelConfig,
+    ProviderError,
+)
+from forge.tools import MINIMAL_TOOLS, UnknownTool, build_tools
 
 __version__ = "0.1.0"
 
@@ -128,6 +138,114 @@ def scan(path: str = PathOption):
     target = _validate(path)
     report = _guard(target, lambda: Scanner(target).scan())
     typer.echo(render.render_scan(report))
+
+
+def _progress_reporter():
+    """Emite puntos a stderr mientras el modelo genera.
+
+    En una GPU chica cada paso tarda decenas de segundos. Sin ninguna señal, la
+    terminal quieta es indistinguible de un cuelgue — y esa duda es lo que hace
+    que uno corte una consulta que estaba funcionando bien. Va a stderr para no
+    ensuciar la respuesta si alguien redirige la salida.
+    """
+    state = {"pending": 0, "emitted": False}
+
+    def on_token(text: str) -> None:
+        state["pending"] += len(text)
+        if state["pending"] < 40:
+            return
+        typer.secho(".", nl=False, err=True, fg=typer.colors.BRIGHT_BLACK)
+        state["pending"] = 0
+        state["emitted"] = True
+
+    return on_token, state
+
+
+def _tool_selection(value: str):
+    """Traduce `--tools` a la lista de nombres, o `None` para todas."""
+    if value == "all":
+        return None
+    if value == "minimal":
+        return list(MINIMAL_TOOLS)
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Qué querés saber del proyecto"),
+    path: str = PathOption,
+    model: str = typer.Option(
+        DEFAULT_MODEL, "--model", "-m", envvar="FORGE_MODEL", help="Modelo local"
+    ),
+    base_url: str = typer.Option(
+        DEFAULT_BASE_URL,
+        "--base-url",
+        envvar="FORGE_BASE_URL",
+        help="URL del runtime. Podés fijarla con la variable FORGE_BASE_URL.",
+    ),
+    tools: str = typer.Option(
+        "all",
+        "--tools",
+        envvar="FORGE_TOOLS",
+        help="'all', 'minimal' (para modelos chicos) o una lista separada por comas.",
+    ),
+    max_iterations: int = typer.Option(
+        DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
+    ),
+    timeout: float = typer.Option(
+        DEFAULT_TIMEOUT,
+        "--timeout",
+        envvar="FORGE_TIMEOUT",
+        help="Segundos de silencio tolerados entre fragmentos de la respuesta.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Sin indicador de avance."
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="Aprueba las escrituras sin preguntar. Usalo con cuidado."
+    ),
+):
+    """Le pregunta al modelo local sobre el proyecto."""
+    target = _validate(path)
+
+    approver = (
+        approval_cli.approve_everything if yes else approval_cli.confirm_write
+    )
+
+    try:
+        selected = build_tools(
+            target, approver=approver, only=_tool_selection(tools)
+        )
+    except UnknownTool as exc:
+        _fail(str(exc))
+
+    on_token, progress = (None, None) if quiet else _progress_reporter()
+
+    client = LocalChatClient(
+        ModelConfig(base_url=base_url, model=model, timeout=timeout)
+    )
+    agent = Agent(
+        client, selected, max_iterations=max_iterations, on_token=on_token
+    )
+
+    try:
+        result = agent.run(question)
+    except ProviderError as exc:
+        if progress and progress["emitted"]:
+            typer.echo(err=True)
+        _fail(str(exc))
+    finally:
+        client.close()
+
+    if progress and progress["emitted"]:
+        typer.echo(err=True)
+
+    typer.echo(render.render_agent(result))
+
+    # Un tope alcanzado no es una respuesta: quien lo invoque desde un script
+    # tiene que poder distinguirlo sin parsear el texto.
+    if result.hit_limit:
+        raise typer.Exit(code=EXIT_UNHEALTHY)
 
 
 if __name__ == "__main__":

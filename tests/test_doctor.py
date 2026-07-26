@@ -51,3 +51,34 @@ def test_total_excludes_informational_checks(healthy_project):
 
     assert report.total == len([c for c in report.checks if c.scored])
     assert report.total < len(report.checks)
+
+
+def test_serialization_separates_informational_checks(make_project):
+    """Regresión de un error observado con un modelo real.
+
+    Emitir `"scored": false` dentro de cada check hacía que un modelo chico
+    leyera el único `false` de la lista —al lado de `"passed": true`— como
+    "esto falta". Concluyó que no había entorno virtual sobre un proyecto que
+    sí lo tenía. La lista separada elimina el flag que se malinterpretaba.
+    """
+    project = make_project(
+        files={"README.md": "# x", "pyproject.toml": "[project]\n"},
+        dirs=[".git", ".venv", "tests"],
+    )
+
+    payload = Doctor(project).check().to_dict()
+
+    assert [c["name"] for c in payload["informational"]] == ["Entorno virtual"]
+    assert payload["informational"][0]["passed"] is True
+    assert "Entorno virtual" not in [c["name"] for c in payload["checks"]]
+
+    # Ningún check lleva ya un flag cuyo `false` se pueda leer como fracaso.
+    for check in payload["checks"] + payload["informational"]:
+        assert "scored" not in check
+
+
+def test_scored_checks_match_the_score(healthy_project):
+    payload = Doctor(healthy_project).check().to_dict()
+
+    assert len(payload["checks"]) == payload["total"]
+    assert sum(c["passed"] for c in payload["checks"]) == payload["score"]
