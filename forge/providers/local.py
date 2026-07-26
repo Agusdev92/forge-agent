@@ -22,6 +22,7 @@ import httpx
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 DEFAULT_TIMEOUT = 300.0
+DEFAULT_MAX_TOKENS = 1024
 
 
 class ProviderError(Exception):
@@ -46,7 +47,12 @@ class ModelConfig:
     #: emitir nada. En hardware limitado ese tramo mudo domina, y es la razón
     #: del valor alto — no cubre generación lenta, cubre el arranque.
     timeout: float = DEFAULT_TIMEOUT
-    max_tokens: int = 2048
+    #: Bajo a propósito. El contexto del runtime tiene que alcanzar para el
+    #: prompt **más** la respuesta: con el default de 4096 de Ollama y un
+    #: prompt de ~2500 tokens, pedir 2048 de salida excede el límite y el
+    #: runtime trunca la conversación en silencio. Es preferible una respuesta
+    #: más corta que un prompt mutilado sin aviso.
+    max_tokens: int = DEFAULT_MAX_TOKENS
     #: Cero por defecto. Un agente que elige herramientas necesita respuestas
     #: reproducibles, no variadas.
     temperature: float = 0.0

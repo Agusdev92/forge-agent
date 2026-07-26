@@ -25,6 +25,7 @@ from forge.core.stats import Stats
 from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
 from forge.providers import (
     DEFAULT_BASE_URL,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT,
     LocalChatClient,
@@ -208,6 +209,15 @@ def ask(
             "contexto si tu modelo lo soporta."
         ),
     ),
+    max_tokens: int = typer.Option(
+        DEFAULT_MAX_TOKENS,
+        "--max-tokens",
+        envvar="FORGE_MAX_TOKENS",
+        help=(
+            "Tope de tokens por respuesta. El contexto del runtime debe cubrir "
+            "el prompt MÁS esto, o trunca en silencio."
+        ),
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Sin indicador de avance."
     ),
@@ -232,7 +242,10 @@ def ask(
     on_token, progress = (None, None) if quiet else _progress_reporter()
 
     client = LocalChatClient(
-        ModelConfig(base_url=base_url, model=model, timeout=timeout)
+        ModelConfig(
+            base_url=base_url, model=model, timeout=timeout,
+            max_tokens=max_tokens,
+        )
     )
     agent = Agent(
         client,

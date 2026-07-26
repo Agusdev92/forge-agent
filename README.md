@@ -57,8 +57,17 @@ durar minutos, y es la razón del valor alto por defecto.
 ollama ps        # ¿el modelo quedó en GPU o en CPU?
 ```
 
-La columna `PROCESSOR` es el diagnóstico: si dice CPU, el modelo no entró en la
-VRAM y todo va a ser lento. Un modelo más chico o más cuantizado lo resuelve.
+Dos columnas son el diagnóstico:
+
+- **`PROCESSOR`** — si dice `100% CPU`, el modelo no entró en la VRAM y todo va a
+  ser lento sin remedio. Ninguna optimización de prompt lo compensa: la solución
+  es un modelo más chico (`qwen2.5-coder:3b` pesa ~1,9 GB contra 5,1 GB del 7b).
+- **`CONTEXT`** — tiene que cubrir el prompt **más** la respuesta. El default de
+  Ollama es 4096, que para este agente queda justo. Se sube con la variable
+  `OLLAMA_CONTEXT_LENGTH=8192` antes de arrancar el runtime.
+
+Si el contexto queda corto, el runtime trunca en silencio y el síntoma es un
+modelo que "se olvida" de lo que hizo dos pasos atrás.
 
 Si está en GPU y aun así tarda, achicá el prompt:
 
