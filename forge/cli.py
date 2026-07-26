@@ -26,6 +26,7 @@ from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
 from forge.providers import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_TIMEOUT,
     LocalChatClient,
     ModelConfig,
     ProviderError,
@@ -139,6 +140,27 @@ def scan(path: str = PathOption):
     typer.echo(render.render_scan(report))
 
 
+def _progress_reporter():
+    """Emite puntos a stderr mientras el modelo genera.
+
+    En una GPU chica cada paso tarda decenas de segundos. Sin ninguna señal, la
+    terminal quieta es indistinguible de un cuelgue — y esa duda es lo que hace
+    que uno corte una consulta que estaba funcionando bien. Va a stderr para no
+    ensuciar la respuesta si alguien redirige la salida.
+    """
+    state = {"pending": 0, "emitted": False}
+
+    def on_token(text: str) -> None:
+        state["pending"] += len(text)
+        if state["pending"] < 40:
+            return
+        typer.secho(".", nl=False, err=True, fg=typer.colors.BRIGHT_BLACK)
+        state["pending"] = 0
+        state["emitted"] = True
+
+    return on_token, state
+
+
 def _tool_selection(value: str):
     """Traduce `--tools` a la lista de nombres, o `None` para todas."""
     if value == "all":
@@ -170,6 +192,15 @@ def ask(
     max_iterations: int = typer.Option(
         DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
     ),
+    timeout: float = typer.Option(
+        DEFAULT_TIMEOUT,
+        "--timeout",
+        envvar="FORGE_TIMEOUT",
+        help="Segundos de silencio tolerados entre fragmentos de la respuesta.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Sin indicador de avance."
+    ),
     yes: bool = typer.Option(
         False, "--yes", help="Aprueba las escrituras sin preguntar. Usalo con cuidado."
     ),
@@ -188,15 +219,26 @@ def ask(
     except UnknownTool as exc:
         _fail(str(exc))
 
-    client = LocalChatClient(ModelConfig(base_url=base_url, model=model))
-    agent = Agent(client, selected, max_iterations=max_iterations)
+    on_token, progress = (None, None) if quiet else _progress_reporter()
+
+    client = LocalChatClient(
+        ModelConfig(base_url=base_url, model=model, timeout=timeout)
+    )
+    agent = Agent(
+        client, selected, max_iterations=max_iterations, on_token=on_token
+    )
 
     try:
         result = agent.run(question)
     except ProviderError as exc:
+        if progress and progress["emitted"]:
+            typer.echo(err=True)
         _fail(str(exc))
     finally:
         client.close()
+
+    if progress and progress["emitted"]:
+        typer.echo(err=True)
 
     typer.echo(render.render_agent(result))
 

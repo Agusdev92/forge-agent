@@ -82,11 +82,13 @@ class Agent:
         tools,
         max_iterations: int = DEFAULT_MAX_ITERATIONS,
         describe_tools_in_prompt: bool = True,
+        on_token=None,
     ):
         self.client = client
         self.tools = list(tools)
         self.max_iterations = max_iterations
         self.describe_tools_in_prompt = describe_tools_in_prompt
+        self.on_token = on_token
         self._by_name = {t.name: t for t in self.tools}
 
     # ------------------------------------------------------------------
@@ -111,7 +113,9 @@ class Agent:
 
         for iteration in range(1, self.max_iterations + 1):
             result.iterations = iteration
-            response = self.client.chat(messages, tools=self.tools)
+            response = self.client.chat(
+                messages, tools=self.tools, on_token=self.on_token
+            )
 
             calls = response.tool_calls or extract_from_text(
                 response.content, self._by_name

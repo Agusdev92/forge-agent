@@ -115,3 +115,31 @@ def tool_call(name, arguments, call_id="call_1"):
         "type": "function",
         "function": {"name": name, "arguments": json.dumps(arguments)},
     }
+
+
+def sse(*chunks) -> bytes:
+    """Serializa fragmentos al formato SSE que devuelve el endpoint."""
+    lines = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks]
+    lines.append("data: [DONE]\n\n")
+    return "".join(lines).encode()
+
+
+def text_delta(text, finish_reason=None):
+    return {"choices": [{"delta": {"content": text}, "finish_reason": finish_reason}]}
+
+
+def tool_delta(index=0, call_id=None, name=None, arguments=None):
+    """Un fragmento de llamada a herramienta, como los manda el endpoint."""
+    function = {}
+    if name is not None:
+        function["name"] = name
+    if arguments is not None:
+        function["arguments"] = arguments
+
+    entry = {"index": index}
+    if call_id is not None:
+        entry["id"] = call_id
+    if function:
+        entry["function"] = function
+
+    return {"choices": [{"delta": {"tool_calls": [entry]}, "finish_reason": None}]}

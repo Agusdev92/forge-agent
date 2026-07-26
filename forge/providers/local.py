@@ -21,6 +21,7 @@ import httpx
 
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
+DEFAULT_TIMEOUT = 120.0
 
 
 class ProviderError(Exception):
@@ -39,9 +40,11 @@ class ModelTimeout(ProviderError):
 class ModelConfig:
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
-    #: Generoso a propósito: en una GPU chica, un 7B puede tardar bastante en
-    #: la primera respuesta porque además carga el modelo en memoria.
-    timeout: float = 180.0
+    #: Con streaming, el timeout mide el silencio **entre fragmentos**, no la
+    #: duración total de la respuesta. Por eso alcanza con un valor moderado:
+    #: una generación de diez minutos no lo dispara mientras siga llegando
+    #: texto, pero un runtime colgado sí se detecta rápido.
+    timeout: float = DEFAULT_TIMEOUT
     max_tokens: int = 2048
     #: Cero por defecto. Un agente que elige herramientas necesita respuestas
     #: reproducibles, no variadas.
@@ -75,13 +78,27 @@ class LocalChatClient:
         self.config = config or ModelConfig()
         self._client = http_client or httpx.Client(timeout=self.config.timeout)
 
-    def chat(self, messages: list, tools: Optional[list] = None) -> ChatResponse:
+    def chat(
+        self, messages: list, tools: Optional[list] = None, on_token=None
+    ) -> ChatResponse:
+        """Pide una respuesta al modelo, consumiéndola por fragmentos.
+
+        El streaming no es cosmético. Sin él, httpx espera la respuesta entera
+        como un bloque y el timeout corre sobre el tiempo total de generación:
+        en una GPU chica, una respuesta larga lo supera y la consulta se pierde
+        aunque el modelo estuviera trabajando bien. Con streaming el reloj mide
+        el silencio entre fragmentos, que es lo que de verdad indica que algo
+        se colgó.
+
+        `on_token` recibe cada fragmento de texto a medida que llega, para que
+        quien llame pueda mostrar avance.
+        """
         payload = {
             "model": self.config.model,
             "messages": messages,
             "max_tokens": self.config.max_tokens,
             "temperature": self.config.temperature,
-            "stream": False,
+            "stream": True,
         }
         if tools:
             payload["tools"] = [t.to_openai() for t in tools]
@@ -89,7 +106,14 @@ class LocalChatClient:
         url = f"{self.config.base_url.rstrip('/')}/chat/completions"
 
         try:
-            response = self._client.post(url, json=payload)
+            with self._client.stream("POST", url, json=payload) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    raise ProviderError(
+                        f"El modelo devolvió {response.status_code}: "
+                        f"{response.text[:400]}"
+                    )
+                return self._consume(response, on_token)
         except httpx.ConnectError as exc:
             raise ModelUnavailable(
                 f"No hay un modelo escuchando en {self.config.base_url}. "
@@ -97,26 +121,97 @@ class LocalChatClient:
             ) from exc
         except httpx.TimeoutException as exc:
             raise ModelTimeout(
-                f"El modelo no respondió en {self.config.timeout:.0f}s. "
-                "En hardware limitado puede ser normal en la primera llamada."
+                f"El modelo dejó de responder por más de {self.config.timeout:.0f}s. "
+                "Puede estar cargando el modelo en memoria; probá de nuevo o subí "
+                "el límite con --timeout."
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"Error de red hablando con el modelo: {exc}") from exc
 
-        if response.status_code >= 400:
-            raise ProviderError(
-                f"El modelo devolvió {response.status_code}: {response.text[:400]}"
-            )
+    def _consume(self, response, on_token=None) -> ChatResponse:
+        """Acumula los fragmentos de un stream en una respuesta completa.
 
-        return self._parse(response)
+        Las llamadas a herramientas llegan partidas: el nombre suele venir en
+        un fragmento y los argumentos repartidos en varios. Se acumulan por
+        `index`, que es lo que permite además reconstruir varias llamadas en
+        paralelo sin mezclarlas.
+        """
+        parts = []
+        calls = {}
+        finish_reason = ""
+        raw_lines = []
+        saw_stream = False
 
-    def _parse(self, response) -> ChatResponse:
-        """Normaliza la respuesta, tolerando runtimes que se desvían del shape."""
+        for line in response.iter_lines():
+            raw_lines.append(line)
+
+            if not line or not line.startswith("data:"):
+                continue
+
+            saw_stream = True
+            data = line[len("data:") :].strip()
+            if data == "[DONE]":
+                break
+
+            try:
+                chunk = json.loads(data)
+            except ValueError:
+                continue
+
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+
+            choice = choices[0]
+            delta = choice.get("delta") or choice.get("message") or {}
+
+            text = delta.get("content")
+            if text:
+                parts.append(text)
+                if on_token:
+                    on_token(text)
+
+            for raw in delta.get("tool_calls") or []:
+                slot = calls.setdefault(
+                    raw.get("index", len(calls)), {"id": "", "name": "", "arguments": ""}
+                )
+                if raw.get("id"):
+                    slot["id"] = raw["id"]
+                function = raw.get("function") or {}
+                if function.get("name"):
+                    slot["name"] = function["name"]
+                arguments = function.get("arguments")
+                if arguments:
+                    # Algunos runtimes mandan el objeto entero de una sola vez.
+                    slot["arguments"] += (
+                        arguments if isinstance(arguments, str) else json.dumps(arguments)
+                    )
+
+            if choice.get("finish_reason"):
+                finish_reason = choice["finish_reason"]
+
+        if not saw_stream:
+            # El runtime ignoró `stream: true` y mandó la respuesta completa.
+            # Pasa con implementaciones parciales del endpoint compatible.
+            return self._parse_body("\n".join(raw_lines))
+
+        return ChatResponse(
+            content="".join(parts),
+            tool_calls=[
+                ToolCall(name=c["name"], raw_arguments=c["arguments"], id=c["id"])
+                for _, c in sorted(calls.items())
+                if c["name"]
+            ],
+            finish_reason=finish_reason,
+        )
+
+    def _parse_body(self, text: str) -> ChatResponse:
+        """Normaliza una respuesta completa (no fragmentada)."""
         try:
-            body = response.json()
+            body = json.loads(text)
         except ValueError as exc:
             raise ProviderError(
-                f"El modelo devolvió algo que no es JSON: {response.text[:200]}"
+                f"El modelo devolvió algo que no es JSON: {text[:200]}"
             ) from exc
 
         choices = body.get("choices") or []

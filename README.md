@@ -39,8 +39,13 @@ forge ask "¿qué le falta a este proyecto?"
 forge ask "escribí un README" --path ../otro-proyecto
 ```
 
-Opciones: `--model`, `--base-url`, `--tools`, `--max-iterations`, y `--yes` para
-aprobar las escrituras sin preguntar.
+Opciones: `--model`, `--base-url`, `--tools`, `--timeout`, `--max-iterations`,
+`--quiet` y `--yes` para aprobar las escrituras sin preguntar.
+
+La respuesta se consume por fragmentos, así que mientras el modelo genera vas a
+ver puntos de avance. **`--timeout` mide el silencio entre fragmentos, no la
+duración total**: una respuesta de diez minutos no lo dispara mientras siga
+llegando texto, pero un runtime colgado se detecta enseguida.
 
 ### Configuración persistente
 
@@ -50,6 +55,7 @@ Para no repetir las opciones en cada consulta, hay tres variables de entorno:
 export FORGE_BASE_URL=http://192.168.1.47:11434/v1
 export FORGE_MODEL=qwen2.5-coder:7b
 export FORGE_TOOLS=all
+export FORGE_TIMEOUT=120
 
 forge ask "¿qué le falta?"     # ya usa lo de arriba
 ```

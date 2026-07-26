@@ -25,7 +25,8 @@ class ScriptedClient:
         self.responses = list(responses)
         self.conversations = []
 
-    def chat(self, messages, tools=None):
+    def chat(self, messages, tools=None, on_token=None):
+        self.on_token = on_token
         self.conversations.append([dict(m) for m in messages])
         if not self.responses:
             raise AssertionError("El agente pidió más respuestas de las previstas")
@@ -281,3 +282,13 @@ def test_a_tool_returning_a_list_is_not_treated_as_an_error(healthy_project):
     result = agent.run("¿?")
 
     assert not result.invocations[0].failed
+
+
+def test_the_progress_callback_reaches_the_client(make_project):
+    """Sin señal de avance, una terminal quieta no se distingue de un cuelgue."""
+    client = ScriptedClient(ChatResponse(content="ok"))
+    agent = Agent(client, build_tools(make_project()), on_token=print)
+
+    agent.run("¿?")
+
+    assert client.on_token is print
