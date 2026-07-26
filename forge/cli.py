@@ -25,13 +25,14 @@ from forge.core.stats import Stats
 from forge.core.tree import DEFAULT_MAX_DEPTH, Tree
 from forge.providers import (
     DEFAULT_BASE_URL,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT,
     LocalChatClient,
     ModelConfig,
     ProviderError,
 )
-from forge.tools import MINIMAL_TOOLS, UnknownTool, build_tools
+from forge.tools import MINIMAL_TOOLS, READ_ONLY_TOOLS, UnknownTool, build_tools
 
 __version__ = "0.1.0"
 
@@ -167,6 +168,8 @@ def _tool_selection(value: str):
         return None
     if value == "minimal":
         return list(MINIMAL_TOOLS)
+    if value == "read-only":
+        return list(READ_ONLY_TOOLS)
     return [name.strip() for name in value.split(",") if name.strip()]
 
 
@@ -187,7 +190,10 @@ def ask(
         "all",
         "--tools",
         envvar="FORGE_TOOLS",
-        help="'all', 'minimal' (para modelos chicos) o una lista separada por comas.",
+        help=(
+            "'all', 'read-only' (sin escritura), 'minimal' (modelos chicos) "
+            "o una lista separada por comas."
+        ),
     ),
     max_iterations: int = typer.Option(
         DEFAULT_MAX_ITERATIONS, "--max-iterations", help="Tope de pasos del agente"
@@ -197,6 +203,25 @@ def ask(
         "--timeout",
         envvar="FORGE_TIMEOUT",
         help="Segundos de silencio tolerados entre fragmentos de la respuesta.",
+    ),
+    prompt_tools: bool = typer.Option(
+        True,
+        "--prompt-tools/--no-prompt-tools",
+        envvar="FORGE_PROMPT_TOOLS",
+        help=(
+            "Describir las herramientas también en el prompt. Necesario solo "
+            "para modelos sin tool calling nativo; desactivalo para ahorrar "
+            "contexto si tu modelo lo soporta."
+        ),
+    ),
+    max_tokens: int = typer.Option(
+        DEFAULT_MAX_TOKENS,
+        "--max-tokens",
+        envvar="FORGE_MAX_TOKENS",
+        help=(
+            "Tope de tokens por respuesta. El contexto del runtime debe cubrir "
+            "el prompt MÁS esto, o trunca en silencio."
+        ),
     ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Sin indicador de avance."
@@ -222,10 +247,17 @@ def ask(
     on_token, progress = (None, None) if quiet else _progress_reporter()
 
     client = LocalChatClient(
-        ModelConfig(base_url=base_url, model=model, timeout=timeout)
+        ModelConfig(
+            base_url=base_url, model=model, timeout=timeout,
+            max_tokens=max_tokens,
+        )
     )
     agent = Agent(
-        client, selected, max_iterations=max_iterations, on_token=on_token
+        client,
+        selected,
+        max_iterations=max_iterations,
+        describe_tools_in_prompt=prompt_tools,
+        on_token=on_token,
     )
 
     try:

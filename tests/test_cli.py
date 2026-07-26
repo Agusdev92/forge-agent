@@ -169,3 +169,37 @@ def test_minimal_selection_is_accepted(healthy_project):
     )
 
     assert "escuchando" in output_of(result)
+
+
+def test_prompt_tools_can_be_disabled(healthy_project, monkeypatch):
+    """Las herramientas viajan como schemas nativos; describirlas otra vez en
+    el prompt son ~280 tokens redundantes en un modelo que ya las soporta."""
+    captured = {}
+
+    import forge.cli as cli_module
+
+    original = cli_module.Agent
+
+    def spy(client, tools, **kwargs):
+        captured.update(kwargs)
+        return original(client, tools, **kwargs)
+
+    monkeypatch.setattr(cli_module, "Agent", spy)
+
+    runner.invoke(
+        app,
+        ["ask", "hola", "--path", str(healthy_project), "--no-prompt-tools",
+         "--base-url", DEAD_URL],
+    )
+
+    assert captured["describe_tools_in_prompt"] is False
+
+
+def test_prompt_tools_are_described_by_default(make_project):
+    """El default es seguro: un modelo desconocido puede no soportar el nativo."""
+    from forge.agent import Agent
+    from forge.tools import build_tools
+
+    agent = Agent(None, build_tools(make_project()))
+
+    assert "forge_doctor" in agent.system_prompt()

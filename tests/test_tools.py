@@ -287,3 +287,19 @@ def test_selection_keeps_the_security_controls(make_project):
 
     assert "error" in result
     assert not (project.parent / "fuera.txt").exists()
+
+
+def test_read_only_excludes_writing(make_project):
+    """Un modelo chico no distingue 'evaluá esto' de 'producí esto'.
+
+    Ante una pregunta de lectura, un 3B eligió `write_file` y propuso
+    reescribir el archivo entero. Si la pregunta es una pregunta, lo más
+    barato es que la herramienta de escritura ni esté disponible.
+    """
+    from forge.tools import READ_ONLY_TOOLS
+
+    names = [t.name for t in build_tools(make_project(), only=READ_ONLY_TOOLS)]
+
+    assert "write_file" not in names
+    assert "read_file" in names
+    assert len(names) == 6

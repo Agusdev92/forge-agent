@@ -47,6 +47,39 @@ ver puntos de avance. **`--timeout` mide el silencio entre fragmentos, no la
 duración total**: una respuesta de diez minutos no lo dispara mientras siga
 llegando texto, pero un runtime colgado se detecta enseguida.
 
+Hay un silencio inevitable **antes** del primer token: el runtime carga el modelo
+y procesa el prompt entero sin emitir nada. En hardware limitado ese tramo puede
+durar minutos, y es la razón del valor alto por defecto.
+
+### Cuando tarda demasiado
+
+```bash
+ollama ps        # ¿el modelo quedó en GPU o en CPU?
+```
+
+Dos columnas son el diagnóstico:
+
+- **`PROCESSOR`** — si dice `100% CPU`, el modelo no entró en la VRAM y todo va a
+  ser lento sin remedio. Ninguna optimización de prompt lo compensa: la solución
+  es un modelo más chico (`qwen2.5-coder:3b` pesa ~1,9 GB contra 5,1 GB del 7b).
+- **`CONTEXT`** — tiene que cubrir el prompt **más** la respuesta. El default de
+  Ollama es 4096, que para este agente queda justo. Se sube con la variable
+  `OLLAMA_CONTEXT_LENGTH=8192` antes de arrancar el runtime.
+
+Si el contexto queda corto, el runtime trunca en silencio y el síntoma es un
+modelo que "se olvida" de lo que hizo dos pasos atrás.
+
+Si está en GPU y aun así tarda, achicá el prompt:
+
+```bash
+forge ask "..." --no-prompt-tools    # ~280 tokens menos
+forge ask "..." --tools minimal      # menos schemas de herramientas
+```
+
+`--no-prompt-tools` saca la descripción de las herramientas del prompt. Solo hace
+falta para modelos **sin** tool calling nativo — con uno que lo soporta (como
+`qwen2.5-coder`) es información duplicada, porque los schemas ya viajan aparte.
+
 ### Configuración persistente
 
 Para no repetir las opciones en cada consulta, hay tres variables de entorno:
@@ -104,9 +137,16 @@ que se parecen y gasta pasos. `--tools minimal` deja tres que cubren el ciclo
 completo (`forge_analyze` para descubrir, `read_file`, `write_file`):
 
 ```bash
-forge ask "..." --tools minimal
+forge ask "..." --tools read-only   # sin write_file
+forge ask "..." --tools minimal     # tres herramientas, con escritura
 forge ask "..." --tools forge_doctor,read_file    # o elegilas a mano
 ```
+
+**Para preguntas, usá `read-only`.** Un modelo chico no distingue "evaluá esto"
+de "producí esto": ante *"leé el README y decime si está bien"*, un 3B eligió
+`write_file` y propuso reescribirlo entero borrando secciones. La compuerta de
+aprobación lo frenó, pero la consulta se perdió igual. Si la herramienta de
+escritura no está sobre la mesa, la tentación desaparece.
 
 Vale la pena probar `all` primero y recortar solo si ves llamadas erróneas en la
 traza que imprime `forge ask` — para eso está.

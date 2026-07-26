@@ -41,6 +41,22 @@ from forge.tools.sandbox import (
 #: cual no hace falta ninguna de las otras de análisis.
 MINIMAL_TOOLS = ("forge_analyze", "read_file", "write_file")
 
+#: Las herramientas que no modifican nada.
+#:
+#: Existe porque un modelo chico no distingue "evaluá esto" de "producí esto":
+#: ante "leé el README y decime si está bien", un 3B eligió `write_file` y
+#: propuso reescribirlo entero, borrando secciones. La compuerta de aprobación
+#: lo frenó, pero la consulta se perdió igual. Si la pregunta es una pregunta,
+#: lo más barato es que la herramienta de escritura ni esté sobre la mesa.
+READ_ONLY_TOOLS = (
+    "forge_analyze",
+    "forge_doctor",
+    "forge_stats",
+    "forge_scan",
+    "forge_tree",
+    "read_file",
+)
+
 
 def _ok(payload) -> str:
     return json.dumps(payload, ensure_ascii=False)
