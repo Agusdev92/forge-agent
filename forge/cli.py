@@ -198,6 +198,16 @@ def ask(
         envvar="FORGE_TIMEOUT",
         help="Segundos de silencio tolerados entre fragmentos de la respuesta.",
     ),
+    prompt_tools: bool = typer.Option(
+        True,
+        "--prompt-tools/--no-prompt-tools",
+        envvar="FORGE_PROMPT_TOOLS",
+        help=(
+            "Describir las herramientas también en el prompt. Necesario solo "
+            "para modelos sin tool calling nativo; desactivalo para ahorrar "
+            "contexto si tu modelo lo soporta."
+        ),
+    ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Sin indicador de avance."
     ),
@@ -225,7 +235,11 @@ def ask(
         ModelConfig(base_url=base_url, model=model, timeout=timeout)
     )
     agent = Agent(
-        client, selected, max_iterations=max_iterations, on_token=on_token
+        client,
+        selected,
+        max_iterations=max_iterations,
+        describe_tools_in_prompt=prompt_tools,
+        on_token=on_token,
     )
 
     try:

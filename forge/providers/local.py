@@ -21,7 +21,7 @@ import httpx
 
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
-DEFAULT_TIMEOUT = 120.0
+DEFAULT_TIMEOUT = 300.0
 
 
 class ProviderError(Exception):
@@ -40,10 +40,11 @@ class ModelTimeout(ProviderError):
 class ModelConfig:
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
-    #: Con streaming, el timeout mide el silencio **entre fragmentos**, no la
-    #: duración total de la respuesta. Por eso alcanza con un valor moderado:
-    #: una generación de diez minutos no lo dispara mientras siga llegando
-    #: texto, pero un runtime colgado sí se detecta rápido.
+    #: Con streaming el timeout mide el silencio **entre fragmentos**, no la
+    #: duración total. Pero hay un silencio inevitable antes del primer token:
+    #: el runtime carga el modelo en memoria y procesa el prompt entero sin
+    #: emitir nada. En hardware limitado ese tramo mudo domina, y es la razón
+    #: del valor alto — no cubre generación lenta, cubre el arranque.
     timeout: float = DEFAULT_TIMEOUT
     max_tokens: int = 2048
     #: Cero por defecto. Un agente que elige herramientas necesita respuestas
@@ -121,9 +122,13 @@ class LocalChatClient:
             ) from exc
         except httpx.TimeoutException as exc:
             raise ModelTimeout(
-                f"El modelo dejó de responder por más de {self.config.timeout:.0f}s. "
-                "Puede estar cargando el modelo en memoria; probá de nuevo o subí "
-                "el límite con --timeout."
+                f"El modelo no emitió nada durante {self.config.timeout:.0f}s.\n"
+                "   Suele ser el arranque: el runtime carga el modelo y procesa el "
+                "prompt sin emitir nada.\n"
+                "   Verificá con `ollama ps` si el modelo quedó en GPU o en CPU — "
+                "en CPU esto es esperable.\n"
+                "   Podés subir el límite con --timeout o acortar el prompt con "
+                "--no-prompt-tools."
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"Error de red hablando con el modelo: {exc}") from exc

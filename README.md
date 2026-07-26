@@ -47,6 +47,30 @@ ver puntos de avance. **`--timeout` mide el silencio entre fragmentos, no la
 duración total**: una respuesta de diez minutos no lo dispara mientras siga
 llegando texto, pero un runtime colgado se detecta enseguida.
 
+Hay un silencio inevitable **antes** del primer token: el runtime carga el modelo
+y procesa el prompt entero sin emitir nada. En hardware limitado ese tramo puede
+durar minutos, y es la razón del valor alto por defecto.
+
+### Cuando tarda demasiado
+
+```bash
+ollama ps        # ¿el modelo quedó en GPU o en CPU?
+```
+
+La columna `PROCESSOR` es el diagnóstico: si dice CPU, el modelo no entró en la
+VRAM y todo va a ser lento. Un modelo más chico o más cuantizado lo resuelve.
+
+Si está en GPU y aun así tarda, achicá el prompt:
+
+```bash
+forge ask "..." --no-prompt-tools    # ~280 tokens menos
+forge ask "..." --tools minimal      # menos schemas de herramientas
+```
+
+`--no-prompt-tools` saca la descripción de las herramientas del prompt. Solo hace
+falta para modelos **sin** tool calling nativo — con uno que lo soporta (como
+`qwen2.5-coder`) es información duplicada, porque los schemas ya viajan aparte.
+
 ### Configuración persistente
 
 Para no repetir las opciones en cada consulta, hay tres variables de entorno:
