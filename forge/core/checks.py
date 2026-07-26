@@ -42,11 +42,19 @@ class CheckResult:
         return self.status is Status.OK
 
     def to_dict(self) -> dict:
+        """Sin el flag `scored`: la lista que lo contiene ya lo dice.
+
+        Emitirlo acá costó un error real. Un modelo vio `"scored": false` —el
+        único `false` de la lista, al lado de `"passed": true`— y concluyó que
+        el entorno virtual no existía, cuando existía y pasaba. El nombre del
+        campo no dice qué significa que sea falso, así que la corrección no es
+        explicárselo mejor al modelo sino no hacerle interpretar el flag: los
+        checks informativos van en una lista aparte (ver `DoctorReport`).
+        """
         return {
             "name": self.name,
             "status": self.status.value,
             "detail": self.detail,
-            "scored": self.scored,
             "passed": self.passed,
         }
 
